@@ -11,7 +11,6 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 struct Record {
-    id: u64,
     payload: String,
 }
 
@@ -67,16 +66,19 @@ async fn main() {
         let record: Record = result.unwrap();
         
         let payload: HashMap<String, Value> = serde_json::from_str(&record.payload).unwrap();
+        let payload_id_string = payload.get("id").unwrap().to_string();
+        // SPECIAL case of data
+        let payload_id = payload_id_string.trim_matches('"');
         let searchable_content = payload.get("searchable_content");
-        if searchable_content.is_none() {
+        if searchable_content.is_none() || payload_id.is_empty() {
             continue;
         }
         let searchable_content_string = searchable_content.unwrap().to_string();
-        if searchable_content_string == "" || searchable_content_string == "null" {
+        // SPECIAL broken json
+        if searchable_content_string.is_empty() || searchable_content_string == "null" {
             continue;
         }
         let text = searchable_content_string;
-        let id = record.id;
         let embeddings: Vectors = model
             .encode(&[text])
             .unwrap()
@@ -85,7 +87,14 @@ async fn main() {
             .unwrap()
             .into();
 
-        let point = PointStruct::new(id, embeddings as Vectors, payload);
+        let point = match payload_id.parse::<u64>() {
+            Ok(id) => PointStruct::new(id, embeddings as Vectors, payload),
+            Err(err) => {
+                info!("err: {:?}", err);
+                PointStruct::new(payload_id.to_string(), embeddings as Vectors, payload)
+            }
+        };
+
         points.insert(index, point);
         index += 1;
         if index > 100 {
