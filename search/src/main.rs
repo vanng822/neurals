@@ -4,11 +4,11 @@ use axum::extract::Query;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
-use log::info;
 use qdrant_client::qdrant::{
     SearchParamsBuilder, SearchPointsBuilder, Value
 };
 use qdrant_client::Qdrant;
+use rust_bert::pipelines::sentence_embeddings::builder::Remote;
 use rust_bert::pipelines::sentence_embeddings::{SentenceEmbeddingsBuilder, SentenceEmbeddingsModel};
 use serde::{Deserialize, Serialize};
 
@@ -20,19 +20,18 @@ struct RecordResponse {
 
 const COLLECTION_NAME: &str = "test";
 
-async fn get_model() -> SentenceEmbeddingsModel {
-    // TODO cache this; maybe https://docs.rust-embedded.org/book/peripherals/singletons.html
-    let model = tokio::task::spawn_blocking(|| {
+async fn get_model_builder() -> SentenceEmbeddingsBuilder<Remote> {
+    let builder = tokio::task::spawn_blocking(|| {
         SentenceEmbeddingsBuilder::remote(
         rust_bert::pipelines::sentence_embeddings::SentenceEmbeddingsModelType::AllMiniLmL12V2,
-    )
-    .create_model()
+        )
     });
 
-    let model = model.await.unwrap();
-    
-    let model = model.unwrap();
-    model
+    builder.await.unwrap()
+}
+
+async fn get_model() -> SentenceEmbeddingsModel {
+    get_model_builder().await.create_model().unwrap()
 }
 
 async fn get_qdrant_client() -> Qdrant {
@@ -53,12 +52,12 @@ async fn search(
 ) -> impl IntoResponse {
     let client = get_qdrant_client().await;
     let model = get_model().await;
+
     let vector = model.encode(&[params.text]).unwrap().into_iter().next().unwrap();
     let request = SearchPointsBuilder::new(COLLECTION_NAME, vector, 10)
         .with_payload(true)
         .params(SearchParamsBuilder::default().exact(true));
     let result = client.search_points(request).await.unwrap();
-    info!("result: {:?}", result);
     let mut response_data: Vec<RecordResponse> = vec![];
     let index = 0;
     for res in result.result.into_iter() {
