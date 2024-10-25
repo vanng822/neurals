@@ -4,13 +4,16 @@ use axum::extract::Query;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
+use log::info;
 use qdrant_client::qdrant::{
     SearchParamsBuilder, SearchPointsBuilder, Value
 };
 use qdrant_client::Qdrant;
 use rust_bert::pipelines::sentence_embeddings::builder::Remote;
-use rust_bert::pipelines::sentence_embeddings::{SentenceEmbeddingsBuilder, SentenceEmbeddingsModel};
+use rust_bert::pipelines::sentence_embeddings::{SentenceEmbeddingsBuilder, SentenceEmbeddingsConfig, SentenceEmbeddingsModel, SentenceEmbeddingsModelType};
+use rust_bert::RustBertError;
 use serde::{Deserialize, Serialize};
+use tch::{Device, Kind};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct RecordResponse {
@@ -20,25 +23,24 @@ struct RecordResponse {
 
 const COLLECTION_NAME: &str = "test";
 
-async fn get_model_builder() -> SentenceEmbeddingsBuilder<Remote> {
-    let builder = tokio::task::spawn_blocking(|| {
+async fn get_model() -> SentenceEmbeddingsModel {
+    let model = tokio::task::spawn_blocking(|| {
         SentenceEmbeddingsBuilder::remote(
-        rust_bert::pipelines::sentence_embeddings::SentenceEmbeddingsModelType::AllMiniLmL12V2,
+            rust_bert::pipelines::sentence_embeddings::SentenceEmbeddingsModelType::AllMiniLmL12V2,
         )
+        .create_model()
     });
 
-    builder.await.unwrap()
-}
-
-async fn get_model() -> SentenceEmbeddingsModel {
-    get_model_builder().await.create_model().unwrap()
+    let model = model.await.expect("Result of model");
+    
+    model.expect("No model")
 }
 
 async fn get_qdrant_client() -> Qdrant {
     // TODO cache this
     let client = Qdrant::from_url(&std::env::var("QDRANT_URL").unwrap_or("http://localhost:6334".to_owned()))
     .build();
-    let client: Qdrant = client.unwrap();
+    let client: Qdrant = client.expect("No client");
     client
 }
 
@@ -52,7 +54,6 @@ async fn search(
 ) -> impl IntoResponse {
     let client = get_qdrant_client().await;
     let model = get_model().await;
-
     let vector = model.encode(&[params.text]).unwrap().into_iter().next().unwrap();
     let request = SearchPointsBuilder::new(COLLECTION_NAME, vector, 10)
         .with_payload(true)
