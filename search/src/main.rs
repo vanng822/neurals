@@ -4,16 +4,12 @@ use axum::extract::Query;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
-use log::info;
 use qdrant_client::qdrant::{
     SearchParamsBuilder, SearchPointsBuilder, Value
 };
 use qdrant_client::Qdrant;
-use rust_bert::pipelines::sentence_embeddings::builder::Remote;
-use rust_bert::pipelines::sentence_embeddings::{SentenceEmbeddingsBuilder, SentenceEmbeddingsConfig, SentenceEmbeddingsModel, SentenceEmbeddingsModelType};
-use rust_bert::RustBertError;
+use rust_bert::pipelines::sentence_embeddings::{SentenceEmbeddingsBuilder, SentenceEmbeddingsModel};
 use serde::{Deserialize, Serialize};
-use tch::{Device, Kind};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct RecordResponse {
