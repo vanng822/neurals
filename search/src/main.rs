@@ -42,7 +42,8 @@ async fn get_qdrant_client() -> Qdrant {
 
 #[derive(Debug, Serialize, Clone, Deserialize)]
 struct Params {
-    text: String
+    text: String,
+    limit: Option<u16>
 }
 
 async fn search(
@@ -50,8 +51,12 @@ async fn search(
 ) -> impl IntoResponse {
     let client = get_qdrant_client().await;
     let model = get_model().await;
+    let mut limit = params.limit.unwrap_or(10);
+    if limit > 1000 {
+        limit = 10;
+    }
     let vector = model.encode(&[params.text]).unwrap().into_iter().next().unwrap();
-    let request = SearchPointsBuilder::new(COLLECTION_NAME, vector, 10)
+    let request = SearchPointsBuilder::new(COLLECTION_NAME, vector, limit as u64)
         .with_payload(true)
         .params(SearchParamsBuilder::default().exact(true));
     let result = client.search_points(request).await.unwrap();
