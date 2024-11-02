@@ -1,1 +1,9 @@
-This is a starter template for [Learn Next.js](https://nextjs.org/learn).
+# Web
+```bash
+> nvm use
+> npm run dev
+```
+
+```bash
+open http://localhost:3000/
+```
